@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}{{ comp.winner_name }} Wins — Multi-Doc Comparison{% endblock %}
+
+{% block content %}
+<div class="mc-result-wrap">
+
+  <div class="cr-header">
+    <a href="{{ url_for('multi_compare_index') }}" class="back-link">← New Comparison</a>
+    <h1 class="mc-result-title">
+      Ranked <span class="gold">{{ comp.rankings | length }} Documents</span>
+    </h1>
+    <p class="mc-result-sub">Sorted safest → riskiest based on risk score, red flags, and clause analysis.</p>
+  </div>
+
+  {# ── Winner banner ── #}
+  <div class="mc-winner-banner">
+    <div class="mc-winner-inner">
+      <div class="mc-winner-trophy">🏆</div>
+      <div class="mc-winner-text">
+        <div class="mc-winner-label">Recommended Choice</div>
+        <div class="mc-winner-name">{{ comp.winner_name }}</div>
+        <div class="mc-winner-reason">{{ comp.winner_reason }}</div>
+      </div>
+      <div class="mc-winner-score">
+        <div class="mc-ws-num risk-text-{{ comp.rankings[0].result.risk_level | lower }}">
+          {{ comp.rankings[0].result.risk_score }}<span>/100</span>
+        </div>
+        <div class="mc-ws-label">Risk Score</div>
+        <div class="mc-ws-risk risk-text-{{ comp.rankings[0].result.risk_level | lower }}">
+          {{ comp.rankings[0].result.risk_level }} Risk
+        </div>
+      </div>
+    </div>
+    <div class="mc-rec" style="margin-top:0.8rem">{{ comp.recommendation | safe }}</div>
+  </div>
+
+  {# ── LLM Pick ── #}
+  {% if comp.llm_enhanced and comp.llm_pick %}
+  <div class="llm-panel" style="margin-bottom:1.2rem">
+    <div class="llm-panel-header">
+      <span class="llm-badge">🤖 AI Recommendation</span>
+      <span class="llm-model">{{ comp.llm_model }} · Ollama local</span>
+    </div>
+    <div class="llm-verdict"><p>{{ comp.llm_pick }}</p></div>
+  </div>
+  {% endif %}
+
+  {# ── Actions ── #}
+  <div class="cr-actions" style="margin-bottom:1.4rem">
+    <a href="{{ url_for('multi_compare_share', key=key) }}" target="_blank" class="export-btn">🔗 Share Rankings</a>
+    <a href="{{ url_for('multi_compare_index') }}" class="export-btn">📊 New Comparison</a>
+    <a href="{{ url_for('index') }}" class="export-btn">📄 Analyze Single Doc</a>
+  </div>
+
+  {# ── Ranked leaderboard ── #}
+  <h2 class="section-heading">📋 Full Leaderboard</h2>
+
+  <div class="mc-leaderboard">
+    {% for r in comp.rankings %}
+    <div class="mc-lb-row {% if r.rank == 1 %}mc-lb-winner{% elif r.rank == comp.rankings|length %}mc-lb-worst{% endif %}">
+
+      {# Rank badge #}
+      <div class="mc-lb-rank">
+        {% if r.rank == 1 %}🥇
+        {% elif r.rank == 2 %}🥈
+        {% elif r.rank == 3 %}🥉
+        {% else %}<span class="mc-rank-num">{{ r.rank }}</span>{% endif %}
+      </div>
+
+      {# Name + doc type #}
+      <div class="mc-lb-name-col">
+        <div class="mc-lb-name">{{ r.name }}</div>
+        <div class="mc-lb-type">{{ r.result.document_type }}</div>
+      </div>
+
+      {# Risk pill #}
+      <div class="mc-lb-risk">
+        <span class="risk-pill risk-pill-{{ r.result.risk_level | lower }}">
+          {{ r.result.risk_level }}
+        </span>
+        <div class="mc-lb-score-wrap">
+          <div class="mc-lb-score-bar">
+            <div class="mc-lb-score-fill risk-fill-{{ r.result.risk_level | lower }}"
+                 style="width:{{ r.result.risk_score }}%"></div>
+          </div>
+          <span class="mc-lb-score-num">{{ r.result.risk_score }}/100</span>
+        </div>
+      </div>
+
+      {# Stats #}
+      <div class="mc-lb-stats">
+        <div class="mc-lb-stat {% if r.result.red_flags|length > 0 %}mc-stat-bad{% endif %}">
+          <span class="mc-stat-icon">🚩</span>
+          {{ r.result.red_flags | length }} flag{{ 's' if r.result.red_flags|length != 1 }}
+        </div>
+        <div class="mc-lb-stat {% if r.watch_count > 0 %}mc-stat-warn{% endif %}">
+          <span class="mc-stat-icon">⚠</span>
+          {{ r.watch_count }} watch-out{{ 's' if r.watch_count != 1 }}
+        </div>
+      </div>
+
+      {# Expand toggle #}
+      <button type="button" class="mc-expand-btn"
+              onclick="toggleLbDetail(this)" title="Show details">▼</button>
+
+      {# Expanded detail (hidden by default) #}
+      <div class="mc-lb-detail" style="display:none">
+        <div class="mc-lb-detail-grid">
+          {% if r.strengths %}
+          <div class="mc-detail-col">
+            <div class="mc-detail-label">✅ Strengths</div>
+            {% for s in r.strengths %}
+            <div class="mc-detail-item mc-item-good">{{ s }}</div>
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% if r.weaknesses %}
+          <div class="mc-detail-col">
+            <div class="mc-detail-label">⚠ Concerns</div>
+            {% for w in r.weaknesses %}
+            <div class="mc-detail-item mc-item-bad">{{ w }}</div>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        {% if r.result.readability %}
+        {% set rd = r.result.readability %}
+        <div class="mc-detail-readability">
+          📖 Readability: <strong>{{ rd.grade_label }}</strong>
+          · Flesch {{ rd.flesch_ease }}/100
+          · Grade level {{ rd.flesch_grade }}
+          · {{ rd.avg_sentence_len }} words/sentence
+        </div>
+        {% endif %}
+        {% if r.result.red_flags %}
+        <div class="mc-detail-flags">
+          <div class="mc-detail-label">🚩 Red Flags</div>
+          {% for rf in r.result.red_flags %}
+          <div class="mc-rf-item">{{ rf.message }}</div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+
+    </div>
+    {% endfor %}
+  </div>
+
+  {# ── Category matrix ── #}
+  <h2 class="section-heading">📊 Category Matrix</h2>
+  <p class="matrix-legend">
+    <span class="legend-item"><span class="lg-dot good"></span>Fine</span>
+    <span class="legend-item"><span class="lg-dot warn"></span>Watch out</span>
+    <span class="legend-item"><span class="lg-dot missing"></span>Not mentioned</span>
+  </p>
+
+  <div class="matrix-scroll-wrap">
+    <table class="mc-matrix">
+      <thead>
+        <tr>
+          <th class="matrix-cat-hdr">Category</th>
+          {% for name in comp.doc_names %}
+          <th class="matrix-doc-hdr {% if name == comp.winner_name %}matrix-winner-col{% endif %}">
+            {% if name == comp.winner_name %}🏆 {% endif %}{{ name }}
+          </th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in comp.matrix %}
+        <tr>
+          <td class="matrix-cat-cell">
+            <span class="matrix-cat-icon">{{ row.icon }}</span>
+            <span class="matrix-cat-name">{{ row.category }}</span>
+          </td>
+          {% for cell in row.cells %}
+          <td class="matrix-cell matrix-{{ cell.state }}"
+              title="{{ cell.detail }}">
+            {% if cell.state == 'good' %}✓
+            {% elif cell.state == 'warn' %}⚠
+            {% else %}—{% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# ── CTA ── #}
+  <div class="compare-cta">
+    <div class="cta-text">Want the full analysis of the winner?</div>
+    <div class="cta-links">
+      <a href="{{ url_for('index') }}" class="btn-secondary">📄 Analyze {{ comp.winner_name }} in detail</a>
+      <a href="{{ url_for('multi_compare_share', key=key) }}" target="_blank" class="btn-secondary">🔗 Share Rankings</a>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

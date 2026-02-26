@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Compare Multiple Documents — T&amp;C Analyzer{% endblock %}
+
+{% block content %}
+
+<section class="hero" style="padding-bottom:1.5rem">
+  <div class="hero-inner">
+    <div class="badge">📊 Multi-Document Comparison</div>
+    <h1 class="hero-title">Compare Up To <span class="gold">8 Documents</span></h1>
+    <p class="hero-sub">
+      Upload all your health insurance plans, job offers, lease options, or SaaS contracts.<br>
+      Get a ranked leaderboard — <strong>#1 safest</strong> to <strong>#N riskiest</strong> — instantly.
+    </p>
+  </div>
+</section>
+
+{# ── Use-case chips ── #}
+<div class="mc-use-cases">
+  <span class="mc-chip">🏥 Health insurance plans</span>
+  <span class="mc-chip">💼 Job offer contracts</span>
+  <span class="mc-chip">🏠 Apartment leases</span>
+  <span class="mc-chip">☁️ Cloud storage tiers</span>
+  <span class="mc-chip">📱 Mobile phone plans</span>
+  <span class="mc-chip">🎵 Streaming services</span>
+</div>
+
+<form action="{{ url_for('multi_compare_analyze') }}" method="POST"
+      enctype="multipart/form-data" id="multiCompareForm">
+
+  <div class="mc-panels" id="mcPanels">
+
+    {# Pre-render 3 panels; JS adds more up to 8 #}
+    {% for i in range(3) %}
+    <div class="mc-panel" id="mc-panel-{{ i }}" data-index="{{ i }}">
+      <div class="mc-panel-head">
+        <span class="mc-num">{{ i + 1 }}</span>
+        <input type="text" name="doc_{{ i }}_name"
+               class="mc-name-input"
+               placeholder="{% if i == 0 %}e.g. BlueCross Basic{% elif i == 1 %}e.g. Aetna Premium{% else %}e.g. Cigna Gold{% endif %}"
+               maxlength="60" />
+        {% if i >= 2 %}
+        <button type="button" class="mc-remove-btn" onclick="removePanel(this)" title="Remove">✕</button>
+        {% endif %}
+      </div>
+
+      <div class="mc-input-tabs">
+        <button type="button" class="mc-itab active" data-index="{{ i }}" data-tab="paste">📋 Paste</button>
+        <button type="button" class="mc-itab" data-index="{{ i }}" data-tab="file">📂 File</button>
+        <button type="button" class="mc-itab" data-index="{{ i }}" data-tab="img">📷 Image</button>
+      </div>
+
+      <div class="mc-tab-pane active" id="mc-{{ i }}-paste">
+        <textarea name="doc_{{ i }}_text" class="mc-textarea"
+          placeholder="Paste document {{ i + 1 }} text here…" spellcheck="false"></textarea>
+      </div>
+      <div class="mc-tab-pane" id="mc-{{ i }}-file">
+        <div class="mc-drop" data-target="mc-file-{{ i }}">
+          <div class="drop-icon" style="font-size:1.6rem">📄</div>
+          <p class="drop-text" style="font-size:0.85rem">Drop .txt or .pdf</p>
+          <input type="file" name="doc_{{ i }}_file" id="mc-file-{{ i }}"
+                 accept=".txt,.pdf" class="file-input-hidden" />
+          <div class="file-chosen" id="mc-file-chosen-{{ i }}"></div>
+        </div>
+      </div>
+      <div class="mc-tab-pane" id="mc-{{ i }}-img">
+        <div class="mc-drop" data-target="mc-img-{{ i }}">
+          <div class="drop-icon" style="font-size:1.6rem">📷</div>
+          <p class="drop-text" style="font-size:0.85rem">Drop image file</p>
+          <input type="file" name="doc_{{ i }}_file" id="mc-img-{{ i }}"
+                 accept=".png,.jpg,.jpeg,.webp,.tiff,.bmp" class="file-input-hidden" />
+          <div class="file-chosen" id="mc-img-chosen-{{ i }}"></div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+
+  </div>{# /.mc-panels #}
+
+  {# ── Add document button ── #}
+  <div class="mc-add-row">
+    <button type="button" class="mc-add-btn" id="mcAddBtn" onclick="addPanel()">
+      + Add Another Document
+    </button>
+    <span class="mc-add-note" id="mcAddNote">Up to 8 documents</span>
+  </div>
+
+  {# ── Submit ── #}
+  <div class="mc-submit-row">
+    <button type="submit" class="btn-analyze" id="mcSubmitBtn">
+      <span class="btn-icon">📊</span> Rank All Documents
+    </button>
+
+    <div class="llm-toggle-row" style="margin-top:0.8rem">
+      {% if llm and llm.available %}
+      <label class="llm-toggle-label">
+        <input type="checkbox" name="use_llm" value="on" checked class="llm-checkbox" />
+        <span class="llm-toggle-pill on">🤖 AI Recommendation</span>
+        <span class="llm-toggle-note">{{ llm.model }} · Ollama local</span>
+      </label>
+      {% else %}
+      <div class="llm-toggle-label offline">
+        <span class="llm-toggle-pill off">🤖 AI Offline</span>
+        <span class="llm-toggle-note">Rule-based ranking only</span>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</form>
+
+{# JS template for dynamically added panels #}
+<template id="panelTemplate">
+  <div class="mc-panel" id="mc-panel-IDX" data-index="IDX">
+    <div class="mc-panel-head">
+      <span class="mc-num">NUM</span>
+      <input type="text" name="doc_IDX_name" class="mc-name-input"
+             placeholder="Document name" maxlength="60" />
+      <button type="button" class="mc-remove-btn" onclick="removePanel(this)" title="Remove">✕</button>
+    </div>
+    <div class="mc-input-tabs">
+      <button type="button" class="mc-itab active" data-index="IDX" data-tab="paste">📋 Paste</button>
+      <button type="button" class="mc-itab" data-index="IDX" data-tab="file">📂 File</button>
+      <button type="button" class="mc-itab" data-index="IDX" data-tab="img">📷 Image</button>
+    </div>
+    <div class="mc-tab-pane active" id="mc-IDX-paste">
+      <textarea name="doc_IDX_text" class="mc-textarea"
+        placeholder="Paste document text here…" spellcheck="false"></textarea>
+    </div>
+    <div class="mc-tab-pane" id="mc-IDX-file">
+      <div class="mc-drop" data-target="mc-file-IDX">
+        <div class="drop-icon" style="font-size:1.6rem">📄</div>
+        <p class="drop-text" style="font-size:0.85rem">Drop .txt or .pdf</p>
+        <input type="file" name="doc_IDX_file" id="mc-file-IDX"
+               accept=".txt,.pdf" class="file-input-hidden" />
+        <div class="file-chosen" id="mc-file-chosen-IDX"></div>
+      </div>
+    </div>
+    <div class="mc-tab-pane" id="mc-IDX-img">
+      <div class="mc-drop" data-target="mc-img-IDX">
+        <div class="drop-icon" style="font-size:1.6rem">📷</div>
+        <p class="drop-text" style="font-size:0.85rem">Drop image file</p>
+        <input type="file" name="doc_IDX_file" id="mc-img-IDX"
+               accept=".png,.jpg,.jpeg,.webp,.tiff,.bmp" class="file-input-hidden" />
+        <div class="file-chosen" id="mc-img-chosen-IDX"></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+{% endblock %}

@@ -296,5 +296,281 @@ def about():
     return render_template("about.html")
 
 
+# ── Compare routes ────────────────────────────────────────────────────────────
+
+@app.route("/compare", methods=["GET"])
+def compare_index():
+    llm_info = ollama_status()
+    return render_template("compare.html", llm=llm_info)
+
+
+@app.route("/compare/analyze", methods=["POST"])
+def compare_analyze():
+    from comparator import compare as run_compare
+    from llm import compare_with_llm
+
+    errors = []
+    results = {}
+
+    for side in ("left", "right"):
+        name = request.form.get(f"{side}_name", "").strip() or ("Document A" if side == "left" else "Document B")
+        text = ""
+
+        upload = request.files.get(f"{side}_file")
+        if upload and upload.filename:
+            ext = _ext(upload.filename)
+            if ext not in ALL_ALLOWED:
+                errors.append(f"{name}: unsupported file type '{ext}'.")
+            else:
+                text = _extract_text(upload.filename, upload.read())
+        else:
+            text = request.form.get(f"{side}_text", "").strip()
+
+        if not text or len(text.strip()) < 50:
+            errors.append(f"{name}: please provide at least 50 characters of text.")
+        else:
+            try:
+                results[side] = (name, analyze(text))
+            except Exception as e:
+                errors.append(f"{name}: analysis failed — {e}")
+
+    if errors:
+        for err in errors:
+            flash(err, "danger")
+        return redirect(url_for("compare_index"))
+
+    left_name,  left_result  = results["left"]
+    right_name, right_result = results["right"]
+
+    comp = run_compare(left_result, right_result, left_name, right_name)
+
+    # LLM opinion
+    use_llm = request.form.get("use_llm", "on") != "off"
+    if use_llm:
+        try:
+            opinion, model, enhanced = compare_with_llm(
+                left_name=left_name,
+                right_name=right_name,
+                left_summary=left_result.document_summary,
+                right_summary=right_result.document_summary,
+                left_risk=left_result.risk_level,
+                right_risk=right_result.risk_level,
+                left_score=left_result.risk_score,
+                right_score=right_result.risk_score,
+                rule_winner=left_name if comp.overall_winner == "left" else
+                            right_name if comp.overall_winner == "right" else "neither",
+            )
+            comp.llm_opinion  = opinion
+            comp.llm_model    = model
+            comp.llm_enhanced = enhanced
+        except Exception as e:
+            app.logger.warning("LLM compare failed: %s", e)
+
+    key = str(uuid.uuid4())
+    if len(_cache) >= _MAX_CACHE:
+        del _cache[next(iter(_cache))]
+    _cache[key] = {"compare": comp.to_dict()}
+    session["compare_key"] = key
+
+    return redirect(url_for("compare_result", key=key))
+
+
+@app.route("/compare/result/<key>")
+def compare_result(key):
+    entry = _cache.get(key)
+    if not entry or "compare" not in entry:
+        flash("Comparison not found — please run a new comparison.", "warning")
+        return redirect(url_for("compare_index"))
+    from comparator import ComparisonResult
+    comp = ComparisonResult.from_dict(entry["compare"])
+    return render_template("compare_result.html", comp=comp, key=key)
+
+
+@app.route("/compare/share/<key>")
+def compare_share(key):
+    """Minimal shareable card — great for screenshots and links."""
+    entry = _cache.get(key)
+    if not entry or "compare" not in entry:
+        return "Comparison not found or expired.", 404
+    from comparator import ComparisonResult
+    comp = ComparisonResult.from_dict(entry["compare"])
+    return render_template("compare_share.html", comp=comp, key=key)
+
+
+@app.route("/api/compare", methods=["POST"])
+def api_compare():
+    """
+    Compare two T&C documents via REST API.
+    JSON body: { "left": {"name": "...", "text": "..."}, "right": {"name": "...", "text": "..."} }
+    """
+    from comparator import compare as run_compare
+    body = request.get_json(silent=True) or {}
+
+    errors = []
+    sides  = {}
+    for side in ("left", "right"):
+        doc = body.get(side, {})
+        name = doc.get("name", side.title())
+        text = doc.get("text", "").strip()
+        if not text or len(text) < 50:
+            errors.append(f"'{side}' must contain at least 50 characters in 'text'.")
+        else:
+            try:
+                sides[side] = (name, analyze(text))
+            except Exception as e:
+                errors.append(f"'{side}' analysis failed: {e}")
+
+    if errors:
+        return jsonify({"error": errors}), 400
+
+    comp = run_compare(sides["left"][1], sides["right"][1],
+                       sides["left"][0], sides["right"][0])
+    return jsonify(comp.to_dict()), 200
+
+
+# ── Multi-compare routes ──────────────────────────────────────────────────────
+
+@app.route("/multi-compare", methods=["GET"])
+def multi_compare_index():
+    llm_info = ollama_status()
+    return render_template("multi_compare.html", llm=llm_info)
+
+
+@app.route("/multi-compare/analyze", methods=["POST"])
+def multi_compare_analyze():
+    from multi_compare import multi_compare as run_multi
+    from llm import multi_compare_llm
+
+    doc_pairs = []
+    errors    = []
+
+    # Collect up to 8 documents
+    i = 0
+    while True:
+        name = request.form.get(f"doc_{i}_name", "").strip() or f"Document {i+1}"
+        text = ""
+
+        upload = request.files.get(f"doc_{i}_file")
+        if upload and upload.filename:
+            ext = _ext(upload.filename)
+            if ext not in ALL_ALLOWED:
+                errors.append(f"{name}: unsupported file type '{ext}'.")
+                i += 1
+                if i >= 8: break
+                continue
+            text = _extract_text(upload.filename, upload.read())
+        else:
+            text = request.form.get(f"doc_{i}_text", "").strip()
+
+        # Stop when we hit an empty slot
+        if not text and not (upload and upload.filename):
+            if i >= 2:   # need at least 2 non-empty docs
+                break
+            i += 1
+            if i >= 8: break
+            continue
+
+        if text and len(text.strip()) >= 50:
+            try:
+                result = analyze(text)
+                doc_pairs.append((name, result))
+            except Exception as e:
+                errors.append(f"{name}: analysis failed — {e}")
+        elif text:
+            errors.append(f"{name}: too short (minimum 50 characters).")
+
+        i += 1
+        if i >= 8:
+            break
+
+    if len(doc_pairs) < 2:
+        flash("Please provide at least 2 documents to compare.", "danger")
+        for err in errors:
+            flash(err, "warning")
+        return redirect(url_for("multi_compare_index"))
+
+    if errors:
+        for err in errors:
+            flash(err, "warning")
+
+    comp = run_multi(doc_pairs)
+
+    # LLM pick
+    use_llm = request.form.get("use_llm", "on") != "off"
+    if use_llm:
+        try:
+            summaries = [
+                (r.name, r.result.risk_level, r.result.risk_score, r.result.document_summary)
+                for r in comp.rankings
+            ]
+            pick, model, enhanced = multi_compare_llm(summaries)
+            comp.llm_pick     = pick
+            comp.llm_model    = model
+            comp.llm_enhanced = enhanced
+        except Exception as e:
+            app.logger.warning("LLM multi-compare failed: %s", e)
+
+    key = str(uuid.uuid4())
+    if len(_cache) >= _MAX_CACHE:
+        del _cache[next(iter(_cache))]
+    _cache[key] = {"multi": comp.to_dict()}
+    session["multi_key"] = key
+
+    return redirect(url_for("multi_compare_result", key=key))
+
+
+@app.route("/multi-compare/result/<key>")
+def multi_compare_result(key):
+    entry = _cache.get(key)
+    if not entry or "multi" not in entry:
+        flash("Comparison not found — please run a new comparison.", "warning")
+        return redirect(url_for("multi_compare_index"))
+    from multi_compare import MultiCompareResult
+    comp = MultiCompareResult.from_dict(entry["multi"])
+    return render_template("multi_compare_result.html", comp=comp, key=key)
+
+
+@app.route("/multi-compare/share/<key>")
+def multi_compare_share(key):
+    entry = _cache.get(key)
+    if not entry or "multi" not in entry:
+        return "Comparison not found or expired.", 404
+    from multi_compare import MultiCompareResult
+    comp = MultiCompareResult.from_dict(entry["multi"])
+    return render_template("multi_compare_share.html", comp=comp, key=key)
+
+
+@app.route("/api/multi-compare", methods=["POST"])
+def api_multi_compare():
+    """
+    Rank N documents via REST API.
+    JSON: { "documents": [{"name": "...", "text": "..."}, ...] }
+    """
+    from multi_compare import multi_compare as run_multi
+    body = request.get_json(silent=True) or {}
+    docs = body.get("documents", [])
+
+    if len(docs) < 2:
+        return jsonify({"error": "Provide at least 2 documents in 'documents' array."}), 400
+
+    pairs, errors = [], []
+    for doc in docs[:8]:
+        name = doc.get("name", "Unnamed")
+        text = doc.get("text", "").strip()
+        if not text or len(text) < 50:
+            errors.append(f"'{name}': text too short or missing.")
+        else:
+            try:
+                pairs.append((name, analyze(text)))
+            except Exception as e:
+                errors.append(f"'{name}': {e}")
+
+    if len(pairs) < 2:
+        return jsonify({"error": errors or ["Need at least 2 valid documents."]}), 400
+
+    comp = run_multi(pairs)
+    return jsonify(comp.to_dict()), 200
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5050)
