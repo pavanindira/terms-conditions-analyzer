@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Development & IDE
+.git/
+.gitignore
+.env
+.env.*
+*.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Docker itself
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Docs (not needed in image)
+README.md

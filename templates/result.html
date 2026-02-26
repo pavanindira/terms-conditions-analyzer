@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block title %}Analysis Result — T&amp;C Analyzer{% endblock %}
+
+{% block content %}
+<div class="result-wrap">
+
+  {# ── Document header ── #}
+  <div class="result-header">
+    <a href="{{ url_for('index') }}" class="back-link">← Analyze Another</a>
+    <div class="doc-meta">
+      <span class="doc-type-badge">{{ r.document_type }}</span>
+      <span class="doc-stats">{{ "{:,}".format(r.word_count) }} words · {{ "{:,}".format(r.char_count) }} characters</span>
+      {% if source %}<span class="doc-stats">· {{ source }}</span>{% endif %}
+    </div>
+    <p class="doc-summary">{{ r.document_summary }}</p>
+  </div>
+
+  {# ── LLM Insight Panel ── #}
+  {% if llm and llm.enhanced %}
+  <div class="llm-panel">
+    <div class="llm-panel-header">
+      <span class="llm-badge">🤖 AI Enhanced</span>
+      <span class="llm-model">{{ llm.model_used }} via Ollama (local)</span>
+    </div>
+
+    {% if llm.overall_verdict %}
+    <div class="llm-verdict">
+      <span class="llm-verdict-label">Bottom Line</span>
+      <p>{{ llm.overall_verdict }}</p>
+    </div>
+    {% endif %}
+
+    {% if llm.plain_summary %}
+    <div class="llm-block">
+      <div class="llm-block-title">📖 Plain-English Explanation</div>
+      <p>{{ llm.plain_summary }}</p>
+    </div>
+    {% endif %}
+
+    <div class="llm-cols">
+      {% if llm.negotiation_tips %}
+      <div class="llm-block">
+        <div class="llm-block-title">🤝 What to Negotiate</div>
+        <ol class="llm-list">
+          {% for tip in llm.negotiation_tips %}<li>{{ tip }}</li>{% endfor %}
+        </ol>
+      </div>
+      {% endif %}
+
+      {% if llm.user_questions %}
+      <div class="llm-block">
+        <div class="llm-block-title">❓ Questions to Ask First</div>
+        <ol class="llm-list">
+          {% for q in llm.user_questions %}<li>{{ q }}</li>{% endfor %}
+        </ol>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if llm.plain_red_flags %}
+    <div class="llm-block">
+      <div class="llm-block-title">⚠️ AI-Spotted Concerns</div>
+      <ul class="llm-list llm-flags">
+        {% for f in llm.plain_red_flags %}<li>{{ f }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+  {% elif llm and not llm.enhanced %}
+  <div class="llm-offline">
+    🤖 <strong>Local AI unavailable</strong> — Ollama is not running or the model is not loaded.
+    Analysis uses rule-based engine only.
+    <a href="{{ url_for('api_docs') }}#llm">Setup guide →</a>
+  </div>
+  {% endif %}
+
+  {# ── Export bar ── #}
+  <div class="export-bar">
+    <span class="export-label">⬇ Export:</span>
+    <a href="{{ url_for('export_pdf',     key=cache_key) }}" class="export-btn" title="Full detailed PDF report">📄 PDF Report</a>
+    <a href="{{ url_for('export_summary', key=cache_key) }}" class="export-btn" title="Clean one-page summary PDF">📋 Summary PDF</a>
+    <a href="{{ url_for('export_word',    key=cache_key) }}" class="export-btn" title="Word document (.docx)">📝 Word (.docx)</a>
+    <a href="{{ url_for('export_csv',     key=cache_key) }}" class="export-btn" title="Spreadsheet-ready CSV">📊 CSV</a>
+  </div>
+
+  {# ── Risk + Readability side-by-side ── #}
+  <div class="top-metrics">
+
+    {# Risk card #}
+    <div class="risk-card risk-{{ r.risk_level | lower }}">
+      <div class="risk-emoji">
+        {% if r.risk_level == "Low" %}🟢{% elif r.risk_level == "Medium" %}🟡{% else %}🔴{% endif %}
+      </div>
+      <div class="risk-body">
+        <div class="risk-label">Overall Risk Level</div>
+        <div class="risk-value">{{ r.risk_level }} Risk</div>
+        <div class="risk-reason">{{ r.risk_reason }}</div>
+      </div>
+      <div class="risk-meter-wrap">
+        <div class="risk-meter-label">Risk Score</div>
+        <div class="risk-meter-bar">
+          <div class="risk-meter-fill risk-fill-{{ r.risk_level | lower }}" style="width: {{ r.risk_score }}%"></div>
+        </div>
+        <div class="risk-meter-value">{{ r.risk_score }}/100</div>
+      </div>
+    </div>
+
+    {# Readability card #}
+    {% if r.readability %}
+    {% set rd = r.readability %}
+    <div class="readability-card">
+      <div class="rd-top">
+        <div>
+          <div class="rd-label">Readability</div>
+          <div class="rd-grade {% if rd.flesch_ease >= 65 %}rd-easy{% elif rd.flesch_ease >= 35 %}rd-medium{% else %}rd-hard{% endif %}">
+            {{ rd.grade_label }}
+          </div>
+          <div class="rd-desc">{{ rd.ease_label }}</div>
+        </div>
+        <div class="rd-score-ring">
+          <svg viewBox="0 0 60 60" class="ring-svg">
+            <circle cx="30" cy="30" r="24" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="5"/>
+            <circle cx="30" cy="30" r="24" fill="none"
+              stroke="{% if rd.flesch_ease >= 65 %}#4caf84{% elif rd.flesch_ease >= 35 %}#f4c842{% else %}#ff6b7a{% endif %}"
+              stroke-width="5"
+              stroke-dasharray="{{ (rd.flesch_ease / 100 * 150.8) | round(1) }} 150.8"
+              stroke-dashoffset="37.7"
+              stroke-linecap="round"/>
+            <text x="30" y="35" text-anchor="middle" font-size="13" font-weight="bold"
+              fill="{% if rd.flesch_ease >= 65 %}#4caf84{% elif rd.flesch_ease >= 35 %}#f4c842{% else %}#ff6b7a{% endif %}">
+              {{ rd.flesch_ease | int }}
+            </text>
+          </svg>
+        </div>
+      </div>
+      <div class="rd-metrics">
+        <div class="rd-metric">
+          <span class="rd-metric-label">Grade Level</span>
+          <span class="rd-metric-val">{{ rd.flesch_grade }}</span>
+        </div>
+        <div class="rd-metric">
+          <span class="rd-metric-label">Avg Sentence</span>
+          <span class="rd-metric-val">{{ rd.avg_sentence_len }}w</span>
+        </div>
+        <div class="rd-metric">
+          <span class="rd-metric-label">Complex Words</span>
+          <span class="rd-metric-val">{{ rd.complex_word_pct }}%</span>
+        </div>
+        <div class="rd-metric">
+          <span class="rd-metric-label">Fog Index</span>
+          <span class="rd-metric-val">{{ rd.gunning_fog }}</span>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  {# ── Key Points ── #}
+  <h2 class="section-heading">📋 Key Points to Know</h2>
+
+  {% if r.key_points %}
+  <div class="key-points-list">
+    {% for pt in r.key_points %}
+    <div class="key-point {% if pt.watch_out %}watch{% endif %}">
+      <div class="pt-icon">{{ pt.icon }}</div>
+      <div class="pt-body">
+        <div class="pt-cat">{{ pt.category }}</div>
+        <div class="pt-title">
+          {{ pt.title }}
+          {% if pt.watch_out %}<span class="watch-badge">⚠ Watch Out</span>{% endif %}
+        </div>
+        <div class="pt-detail">{{ pt.detail }}</div>
+
+        {# Clause evidence drawer #}
+        {% if pt.evidence %}
+        <button class="evidence-toggle" onclick="toggleEvidence(this)">
+          🔍 Show clause evidence ({{ pt.evidence | length }})
+        </button>
+        <div class="evidence-drawer" style="display:none">
+          {% for ev in pt.evidence %}
+          <div class="evidence-item">"{{ ev }}"</div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="empty-note">No specific clauses detected. Review the full document manually.</p>
+  {% endif %}
+
+  {# ── Before Signing ── #}
+  <h2 class="section-heading">✅ Before You Sign</h2>
+  <div class="checklist-box">
+    {% for item in r.before_signing %}
+    <div class="check-item">
+      <div class="check-num">{{ loop.index }}</div>
+      <span>{{ item }}</span>
+    </div>
+    {% endfor %}
+  </div>
+
+  {# ── Red Flags ── #}
+  <h2 class="section-heading">🚩 Red Flags</h2>
+  <div class="red-flags-box">
+    {% if r.red_flags %}
+      {% for rf in r.red_flags %}
+      <div class="flag-item">
+        <span class="flag-icon">🚩</span>
+        <div class="flag-body">
+          <span>{{ rf.message }}</span>
+          {% if rf.evidence %}
+          <button class="evidence-toggle small" onclick="toggleEvidence(this)">
+            🔍 Show in document
+          </button>
+          <div class="evidence-drawer" style="display:none">
+            {% for ev in rf.evidence %}
+            <div class="evidence-item">"{{ ev }}"</div>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p class="no-flags">No major red flags detected in this document.</p>
+    {% endif %}
+  </div>
+
+  {# ── Export again at bottom ── #}
+  <div class="result-actions">
+    <a href="{{ url_for('index') }}" class="btn-secondary">← Analyze Another</a>
+    <a href="{{ url_for('export_summary', key=cache_key) }}" class="btn-secondary">📋 Download Summary PDF</a>
+    <button onclick="window.print()" class="btn-secondary">🖨 Print</button>
+  </div>
+
+</div>
+{% endblock %}

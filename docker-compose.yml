@@ -1,0 +1,144 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T&C Analyzer — Docker Compose
+#
+# Services:
+#   web    — Flask app (port 5050)
+#   ollama — Local LLM server (Ollama)
+#
+# Quick start:
+#   docker compose up --build
+#   docker compose exec ollama ollama pull llama3.2
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Flask web application ─────────────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+
+    container_name: tc_analyzer_web
+    ports:
+      - "5050:5050"
+
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY:-tc-analyzer-secret-change-in-prod}
+
+      # Ollama settings — web service talks to the ollama container
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
+      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-120}
+      - OLLAMA_ENABLED=${OLLAMA_ENABLED:-true}
+
+    volumes:
+      - uploads:/tmp/uploads
+
+    depends_on:
+      ollama:
+        condition: service_started   # Don't wait for model pull to finish
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5050/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+    networks:
+      - tc_net
+
+  # ── Ollama local LLM server ───────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: tc_analyzer_ollama
+
+    ports:
+      - "11434:11434"   # Expose for debugging / direct API access
+
+    volumes:
+      # Persist downloaded models between restarts
+      - ollama_data:/root/.ollama
+
+    # ── GPU support ──────────────────────────────────────────────────────────
+    # Uncomment ONE of the blocks below if you have a GPU:
+    #
+    NVIDIA GPU:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    #
+    # AMD GPU (ROCm):
+    # devices:
+    #   - /dev/kfd
+    #   - /dev/dri
+    # group_add:
+    #   - video
+    # environment:
+    #   - HSA_OVERRIDE_GFX_VERSION=10.3.0   # adjust for your GPU
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+    networks:
+      - tc_net
+
+  # ── Model initializer (runs once, then exits) ─────────────────────────────
+  # Automatically pulls the configured model after Ollama starts.
+  # Remove this service if you prefer to pull models manually.
+  model_init:
+    image: ollama/ollama:latest
+    container_name: tc_analyzer_model_init
+
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
+
+    entrypoint: >
+      sh -c "
+        echo 'Waiting for Ollama to be ready...';
+        until curl -sf http://ollama:11434/api/tags > /dev/null; do sleep 3; done;
+        echo 'Ollama ready. Pulling model: ${OLLAMA_MODEL:-llama3.2}';
+        ollama pull ${OLLAMA_MODEL:-llama3.2};
+        echo 'Model pulled successfully!';
+      "
+
+    depends_on:
+      ollama:
+        condition: service_started
+
+    restart: "no"   # Run once and exit
+
+    networks:
+      - tc_net
+
+volumes:
+  uploads:
+  ollama_data:      # Persists downloaded models (can be several GB)
+
+networks:
+  tc_net:
+    driver: bridge

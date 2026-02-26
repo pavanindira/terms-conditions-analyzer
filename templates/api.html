@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% block title %}REST API Docs — T&amp;C Analyzer{% endblock %}
+
+{% block content %}
+<div class="api-wrap">
+
+  <div class="api-hero">
+    <div class="badge">🌐 REST API</div>
+    <h1 class="api-title">T&amp;C Analyzer <span class="gold">API</span></h1>
+    <p class="api-sub">Analyze any Terms &amp; Conditions document programmatically. No API key required for local deployments.</p>
+  </div>
+
+  {# ── Base URL ── #}
+  <div class="api-section">
+    <div class="api-section-label">Base URL</div>
+    <div class="code-block"><span class="code-method get">BASE</span> http://localhost:5050</div>
+  </div>
+
+  {# ── Endpoints ── #}
+  <div class="api-section">
+    <div class="api-section-label">Endpoints</div>
+
+    <div class="endpoint-card">
+      <div class="endpoint-header">
+        <span class="code-method get">GET</span>
+        <code class="endpoint-path">/api/health</code>
+        <span class="endpoint-desc">Check service status</span>
+      </div>
+      <div class="endpoint-body">
+        <div class="ex-label">Response</div>
+        <pre class="code-pre">{
+  "status": "ok",
+  "version": "2.0"
+}</pre>
+      </div>
+    </div>
+
+    <div class="endpoint-card">
+      <div class="endpoint-header">
+        <span class="code-method post">POST</span>
+        <code class="endpoint-path">/api/analyze</code>
+        <span class="endpoint-desc">Analyze a T&amp;C document</span>
+      </div>
+      <div class="endpoint-body">
+
+        <div class="ex-label">Option 1 — JSON body</div>
+        <pre class="code-pre">curl -X POST http://localhost:5050/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Your Terms and Conditions text here..."}'</pre>
+
+        <div class="ex-label">Option 2 — File upload (.txt / .pdf / image)</div>
+        <pre class="code-pre">curl -X POST http://localhost:5050/api/analyze \
+  -F "file=@/path/to/document.pdf"</pre>
+
+        <div class="ex-label">Option 3 — Form text field</div>
+        <pre class="code-pre">curl -X POST http://localhost:5050/api/analyze \
+  -F "text=Your Terms and Conditions text here..."</pre>
+
+        <div class="ex-label">Python example</div>
+        <pre class="code-pre">import requests
+
+# JSON
+r = requests.post("http://localhost:5050/api/analyze",
+    json={"text": open("terms.txt").read()})
+result = r.json()
+
+# File
+r = requests.post("http://localhost:5050/api/analyze",
+    files={"file": open("terms.pdf", "rb")})
+result = r.json()</pre>
+
+        <div class="ex-label">Response schema</div>
+        <pre class="code-pre">{
+  "document_type":    "SaaS / Software License",
+  "document_summary": "This is a software subscription agreement...",
+  "risk_level":       "High",
+  "risk_reason":      "Contains aggressive clauses...",
+  "risk_score":       78,
+  "word_count":       3200,
+  "char_count":       18540,
+
+  "readability": {
+    "flesch_ease":       22.4,
+    "flesch_grade":      14.1,
+    "gunning_fog":       18.3,
+    "avg_sentence_len":  32.7,
+    "avg_word_len":      5.4,
+    "complex_word_pct":  28.1,
+    "grade_label":       "Very Difficult",
+    "ease_label":        "Dense legal or technical writing..."
+  },
+
+  "key_points": [
+    {
+      "category":  "Auto-Renewal",
+      "icon":      "🔄",
+      "title":     "Automatic Renewal",
+      "detail":    "Your subscription may renew automatically.",
+      "watch_out": true,
+      "evidence":  ["Your plan will automatically renew each year..."]
+    }
+  ],
+
+  "red_flags": [
+    {
+      "message":  "Requires binding arbitration...",
+      "evidence": ["All disputes shall be resolved by binding arbitration..."]
+    }
+  ],
+
+  "before_signing": [
+    "Confirm the auto-renewal date and how to cancel.",
+    "Understand that you give up your right to sue in court."
+  ]
+}</pre>
+      </div>
+    </div>
+
+    <div class="endpoint-card">
+      <div class="endpoint-header">
+        <span class="code-method get">GET</span>
+        <code class="endpoint-path">/api/docs</code>
+        <span class="endpoint-desc">This page</span>
+      </div>
+    </div>
+
+  </div>
+
+  {# ── Error codes ── #}
+  <div class="api-section">
+    <div class="api-section-label">Error Responses</div>
+    <table class="api-table">
+      <thead>
+        <tr><th>Status</th><th>Meaning</th><th>Example</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="status-badge ok">200</span></td>
+          <td>Success</td>
+          <td>Analysis returned</td>
+        </tr>
+        <tr>
+          <td><span class="status-badge warn">400</span></td>
+          <td>Bad request</td>
+          <td>No text / text too short</td>
+        </tr>
+        <tr>
+          <td><span class="status-badge warn">415</span></td>
+          <td>Unsupported media type</td>
+          <td>Unsupported file extension</td>
+        </tr>
+        <tr>
+          <td><span class="status-badge err">500</span></td>
+          <td>Server error</td>
+          <td>Analysis engine failure</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="api-note">
+    <strong>💡 Note:</strong> No authentication is required for local deployments.
+    If you expose this API publicly, add a reverse proxy with rate limiting.
+  </div>
+
+  <a href="{{ url_for('index') }}" class="btn-analyze" style="display:inline-block;width:auto;padding:14px 40px;text-decoration:none;margin-top:2rem;">
+    ← Back to Analyzer
+  </a>
+
+  {# ── LLM Setup section ── #}
+  <div id="llm" style="margin-top:3rem">
+    <h2 class="api-title" style="font-size:1.6rem;margin-bottom:0.5rem">🤖 Local LLM Setup</h2>
+    <p class="api-sub" style="margin-bottom:1.5rem">Run AI-enhanced analysis 100% locally using Ollama.</p>
+
+    <div class="api-section">
+      <div class="api-section-label">Current Status</div>
+      {% if llm and llm.available %}
+      <div class="endpoint-card" style="border-color:rgba(99,102,241,0.3)">
+        <div class="endpoint-header">
+          <span class="status-badge ok">● Online</span>
+          <code class="endpoint-path">{{ llm.base_url }}</code>
+          <span class="endpoint-desc">Model: <strong>{{ llm.model }}</strong>
+            {% if llm.model_loaded %}✅ loaded{% else %}⚠ not pulled yet{% endif %}
+          </span>
+        </div>
+        {% if llm.all_models %}
+        <div class="endpoint-body">
+          <div class="ex-label">Available models</div>
+          <pre class="code-pre">{{ llm.all_models | join('\n') }}</pre>
+        </div>
+        {% endif %}
+      </div>
+      {% else %}
+      <div class="endpoint-card">
+        <div class="endpoint-header">
+          <span class="status-badge err">● Offline</span>
+          <span class="endpoint-desc">{{ llm.reason if llm else 'Ollama not reachable' }}</span>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="api-section">
+      <div class="api-section-label">Docker Setup (recommended)</div>
+      <pre class="code-pre"># 1. Start everything (Ollama pulls automatically)
+docker compose up --build
+
+# 2. Or pull a model manually
+docker compose exec ollama ollama pull llama3.2
+
+# 3. Swap models anytime via .env
+OLLAMA_MODEL=mistral docker compose up</pre>
+    </div>
+
+    <div class="api-section">
+      <div class="api-section-label">Manual Setup (without Docker)</div>
+      <pre class="code-pre"># Install Ollama — https://ollama.com/download
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull a model (choose one)
+ollama pull llama3.2      # 3B — fast, good quality (recommended)
+ollama pull mistral       # 7B — excellent quality, needs more RAM
+ollama pull phi3          # 3.8B — very fast on CPU
+ollama pull gemma2:2b     # 2B — smallest, fastest
+
+# Run (starts on port 11434)
+ollama serve
+
+# Set env var for local development
+export OLLAMA_BASE_URL=http://localhost:11434</pre>
+    </div>
+
+    <div class="api-section">
+      <div class="api-section-label">Model Recommendations</div>
+      <table class="api-table">
+        <thead><tr><th>Model</th><th>Size</th><th>RAM</th><th>Best for</th></tr></thead>
+        <tbody>
+          <tr><td><code>llama3.2</code></td><td>3B</td><td>4GB</td><td>✅ Default — fast, great quality</td></tr>
+          <tr><td><code>mistral</code></td><td>7B</td><td>8GB</td><td>Best quality, slower</td></tr>
+          <tr><td><code>phi3</code></td><td>3.8B</td><td>4GB</td><td>Very fast on CPU</td></tr>
+          <tr><td><code>gemma2:2b</code></td><td>2B</td><td>3GB</td><td>Minimal RAM, good accuracy</td></tr>
+          <tr><td><code>llama3.2:1b</code></td><td>1B</td><td>2GB</td><td>Minimal hardware</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="api-note">
+      <strong>💡 No GPU required.</strong> All models above run on CPU. A GPU will make responses 
+      significantly faster but is completely optional. The rule-based analysis always runs instantly 
+      regardless of LLM status.
+    </div>
+  </div>
+
+</div>
+{% endblock %}

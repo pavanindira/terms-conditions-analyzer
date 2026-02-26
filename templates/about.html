@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}How It Works — T&amp;C Analyzer{% endblock %}
+
+{% block content %}
+
+<div class="about-wrap">
+
+  <h1 class="about-title">How It Works</h1>
+  <p class="about-intro">
+    This tool analyzes Terms &amp; Conditions documents using pure Python —
+    no AI, no external APIs, no data leaving your machine.
+  </p>
+
+  <div class="about-steps">
+
+    <div class="about-step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Document Type Detection</strong>
+        <p>
+          A weighted keyword-matching engine scans the text for domain-specific
+          vocabulary (e.g. "premium" + "claim" + "deductible" → Insurance Policy).
+          The type with the most pattern matches wins.
+        </p>
+      </div>
+    </div>
+
+    <div class="about-step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>Risk Scoring</strong>
+        <p>
+          Over 20 weighted regex patterns scan for aggressive clauses —
+          "binding arbitration", "no refund", "sell personal data", etc.
+          Scores are summed and mapped to Low / Medium / High.
+        </p>
+      </div>
+    </div>
+
+    <div class="about-step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>Key Point Extraction</strong>
+        <p>
+          Dedicated detectors for 11 categories (Payments, Privacy, Cancellation,
+          Liability, Arbitration, IP, Termination, Renewal, Cookies, Changes,
+          Governing Law) each scan the text for relevant patterns and return a
+          plain-English summary.
+        </p>
+      </div>
+    </div>
+
+    <div class="about-step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>Red Flag Detection</strong>
+        <p>
+          14 red-flag rules look for particularly concerning clauses and surface
+          them explicitly so nothing hides in the fine print.
+        </p>
+      </div>
+    </div>
+
+    <div class="about-step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <strong>Before-Signing Checklist</strong>
+        <p>
+          Based on what was detected, a contextual checklist is generated —
+          only items relevant to <em>this specific document</em> appear.
+        </p>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="about-note">
+    <strong>⚠️ Disclaimer:</strong> This tool provides a general overview only.
+    It is not legal advice. For important agreements, always consult a qualified
+    legal professional.
+  </div>
+
+  <a href="{{ url_for('index') }}" class="btn-analyze" style="display:inline-block;width:auto;padding:14px 40px;text-decoration:none;margin-top:2rem;">
+    ← Back to Analyzer
+  </a>
+
+</div>
+
+{% endblock %}
