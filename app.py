@@ -179,7 +179,7 @@ def export_pdf():
         flash("No analysis found — please analyze a document first.", "warning")
         return redirect(url_for("index"))
     from exporters import export_pdf as gen
-    return send_file(io.BytesIO(gen(result, insight)),
+    return send_file(io.BytesIO(gen(result)),
         mimetype="application/pdf", as_attachment=True,
         download_name="tc_analysis_report.pdf")
 
@@ -189,7 +189,7 @@ def export_summary():
     if not result:
         flash("No analysis found.", "warning"); return redirect(url_for("index"))
     from exporters import export_summary_pdf as gen
-    return send_file(io.BytesIO(gen(result, insight)),
+    return send_file(io.BytesIO(gen(result)),
         mimetype="application/pdf", as_attachment=True,
         download_name="tc_summary.pdf")
 
@@ -199,7 +199,7 @@ def export_word():
     if not result:
         flash("No analysis found.", "warning"); return redirect(url_for("index"))
     from exporters import export_word as gen
-    return send_file(io.BytesIO(gen(result, insight)),
+    return send_file(io.BytesIO(gen(result)),
         mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         as_attachment=True, download_name="tc_analysis_report.docx")
 
@@ -209,7 +209,7 @@ def export_csv():
     if not result:
         flash("No analysis found.", "warning"); return redirect(url_for("index"))
     from exporters import export_csv as gen
-    return send_file(io.BytesIO(gen(result, insight)),
+    return send_file(io.BytesIO(gen(result)),
         mimetype="text/csv", as_attachment=True,
         download_name="tc_analysis.csv")
 

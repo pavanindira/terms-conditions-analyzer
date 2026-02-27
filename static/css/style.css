@@ -87,7 +87,7 @@ body::before {
 
 /* ── Main wrap ── */
 .main-wrap {
-  max-width: 820px;
+  max-width: 1220px;
   margin: 0 auto;
   padding: 0 1.5rem 5rem;
   position: relative;
@@ -115,7 +115,7 @@ body::before {
   text-align: center;
   padding: 4rem 0 2rem;
 }
-.hero-inner { max-width: 540px; margin: 0 auto; }
+.hero-inner { margin: 0 auto; }
 
 .badge {
   display: inline-block;
@@ -636,7 +636,8 @@ body::before {
 /* ── Print ── */
 @media print {
   .navbar, .result-actions, .back-link, .btn-secondary { display: none !important; }
-  body { background: #fff; color: #000; }
+  body { background: #fff !important; color: #000 !important; }
+  * { background: transparent !important; color: #000 !important; }
   .result-wrap { padding-top: 0; }
 }
 
